@@ -11,6 +11,7 @@ license = {text = "BSD-2-Clause"}
 dependencies = [
     "amaranth>=0.5",
     "mpmath>=1.4.0",
+    "matplotlib>=3.9.4",
 ]
 
 [project.optional-dependencies]
