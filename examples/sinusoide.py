@@ -26,41 +26,36 @@ dut = FixSinCos(width=WIDTH, iterations=WIDTH)
 sin_values = []
 cos_values = []
 quadrants = []  # store quadrant per sample so we can fix signs after
+reduced_angles = []  # store reduced angle for overflow detection
 
 sim = Simulator(dut)
 sim.add_clock(1e-6)
 
 
 async def testbench(ctx):
-    latency = dut.latency
+    # The CORDIC pipeline has iterations+2 sync stages, but from the
+    # testbench perspective (set before tick, read after tick) the
+    # effective read delay is iterations+1 ticks.
+    effective_latency = dut.latency - 1
 
-    for i in range(N_SAMPLES + latency + 2):
+    for i in range(N_SAMPLES + effective_latency + 2):
         if i < N_SAMPLES:
             # Full-range angle: i/N * full_circle
             angle_full = int(i / N_SAMPLES * (1 << WIDTH)) & ((1 << WIDTH) - 1)
 
             # Quadrant reduction: map into [0, π/2)
+            # Subtract quadrant start so reduced is always in [0, QUARTER).
             quadrant = (angle_full // QUARTER) % 4
             quadrants.append(quadrant)
-
-            if quadrant == 0:
-                reduced = angle_full
-            elif quadrant == 1:
-                # π/2..π  → reflect: π - θ  (i.e., HALF - angle)
-                reduced = 2 * QUARTER - angle_full
-            elif quadrant == 2:
-                # π..3π/2 → θ - π
-                reduced = angle_full - 2 * QUARTER
-            else:
-                # 3π/2..2π → 2π - θ
-                reduced = 4 * QUARTER - angle_full
+            reduced = angle_full - quadrant * QUARTER
+            reduced_angles.append(reduced)
 
             reduced = reduced & ((1 << WIDTH) - 1)
             ctx.set(dut.angle, reduced)
 
         await ctx.tick()
 
-        if i >= latency:
+        if i >= effective_latency:
             sin_raw = ctx.get(dut.sin_out)
             cos_raw = ctx.get(dut.cos_out)
             # Interpret as signed
@@ -81,22 +76,41 @@ with sim.write_vcd("examples/sinusoide.vcd", "examples/sinusoide.gtkw"):
 sin_values = sin_values[:N_SAMPLES]
 cos_values = cos_values[:N_SAMPLES]
 
-# Apply quadrant correction to collected outputs
+# Apply quadrant correction to collected outputs.
+# With subtraction-based reduction (reduced = θ - Q*π/2), the CORDIC
+# computes sin(reduced) and cos(reduced) where reduced ∈ [0, π/2).
+# We reconstruct the full-range sin/cos using:
+#   Q0: sin(θ) = sin(r),          cos(θ) = cos(r)
+#   Q1: sin(θ) = cos(r),          cos(θ) = -sin(r)
+#   Q2: sin(θ) = -sin(r),         cos(θ) = -cos(r)
+#   Q3: sin(θ) = -cos(r),         cos(θ) = sin(r)
+#
+# Note: the CORDIC output is in Q0.15 format which cannot represent +1.0
+# exactly (max is +0.99997). For reduced ≈ 0, cos(0) ≈ 1.0 overflows to
+# ≈ -1.0 in the 16-bit signed output. We detect and clamp this.
+MAX_POS = ((1 << (WIDTH - 1)) - 1) / (1 << (WIDTH - 1))  # ~0.99997
+
 for idx in range(N_SAMPLES):
     q = quadrants[idx]
     s, c = sin_values[idx], cos_values[idx]
+
+    # Fix Q0.15 overflow: for very small reduced angles, cos(r) ≈ 1.0
+    # wraps to ≈ -1.0. Detect and clamp.
+    if reduced_angles[idx] < QUARTER // 64 and c < -0.9:
+        c = MAX_POS
+
     if q == 0:
-        pass  # sin(θ), cos(θ) — correct as-is
+        sin_values[idx] = s
+        cos_values[idx] = c
     elif q == 1:
-        # sin(π-θ) = sin(θ),  cos(π-θ) = -cos(θ)
-        cos_values[idx] = -c
+        sin_values[idx] = c
+        cos_values[idx] = -s
     elif q == 2:
-        # sin(π+θ) = -sin(θ), cos(π+θ) = -cos(θ)
         sin_values[idx] = -s
         cos_values[idx] = -c
     elif q == 3:
-        # sin(2π-θ) = -sin(θ), cos(2π-θ) = cos(θ)
-        sin_values[idx] = -s
+        sin_values[idx] = -c
+        cos_values[idx] = s
 
 # Reference
 ref_angles = [i / N_SAMPLES * 2 * math.pi for i in range(N_SAMPLES)]
@@ -125,4 +139,3 @@ fig.suptitle(f"FixSinCos CORDIC — {WIDTH}-bit, {N_SAMPLES} samples", fontsize=
 fig.tight_layout()
 plt.savefig("examples/sinusoide.png", dpi=150)
 print("Saved examples/sinusoide.png")
-
