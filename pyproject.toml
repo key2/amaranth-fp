@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amaranth-fp"
+version = "0.1.0"
+description = "Floating-point operator generator for Amaranth HDL, inspired by FloPoCo"
+requires-python = ">=3.9"
+license = {text = "BSD-2-Clause"}
+dependencies = [
+    "amaranth>=0.5",
+    "mpmath>=1.4.0",
+]
+
+[project.optional-dependencies]
+sollya = [
+    "sollya @ git+https://github.com/key2/pythonsollya.git",
+]
+dev = [
+    "pytest>=8.4.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+amaranth_fp = ["py.typed"]

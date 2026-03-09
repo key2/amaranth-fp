@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.venv/
+.pdm-python
+pdm.lock
+*.vcd
+*.gtkw
+.pytest_cache/
+flopoco/
+pythonsollya/
+sollya/
+libbf-*/
