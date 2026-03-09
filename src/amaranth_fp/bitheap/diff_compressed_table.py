@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from amaranth import *
+from amaranth.lib.memory import Memory
 
 from ..pipelined import PipelinedComponent
 
@@ -42,13 +43,14 @@ class DiffCompressedTable(PipelinedComponent):
         n = len(vals)
 
         # Base table (full values) — used for simple implementation
-        mem = Memory(shape=ow, depth=max(n, 1), init=vals)
-        m.submodules.mem_rd = mem_rd = mem.read_port()
+        mem = Memory(shape=unsigned(ow), depth=max(n, 1), init=vals)
+        m.submodules.mem = mem
+        mem_rd = mem.read_port()
 
         # Stage 0→1: read
         addr_r = Signal(iw, name="addr_r")
         m.d.sync += addr_r.eq(self.addr)
-        m.d.comb += mem_rd.addr.eq(addr_r)
+        m.d.comb += [mem_rd.addr.eq(addr_r), mem_rd.en.eq(1)]
 
         # Stage 1→2: output
         data_r = Signal(ow, name="data_r")

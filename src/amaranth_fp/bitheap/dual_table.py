@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from amaranth import *
+from amaranth.lib.memory import Memory
 
 from ..pipelined import PipelinedComponent
 
@@ -46,12 +47,15 @@ class DualTable(PipelinedComponent):
         owa = self.output_width_a
         owb = self.output_width_b
 
-        mem_a = Memory(shape=owa, depth=n, init=self.values_a)
-        mem_b = Memory(shape=owb, depth=n, init=self.values_b)
-        m.submodules.rd_a = rd_a = mem_a.read_port()
-        m.submodules.rd_b = rd_b = mem_b.read_port()
+        mem_a = Memory(shape=unsigned(owa), depth=n, init=self.values_a)
+        mem_b = Memory(shape=unsigned(owb), depth=n, init=self.values_b)
+        m.submodules.mem_a = mem_a
+        m.submodules.mem_b = mem_b
+        rd_a = mem_a.read_port()
+        rd_b = mem_b.read_port()
 
-        m.d.comb += [rd_a.addr.eq(self.addr), rd_b.addr.eq(self.addr)]
+        m.d.comb += [rd_a.addr.eq(self.addr), rd_a.en.eq(1),
+                     rd_b.addr.eq(self.addr), rd_b.en.eq(1)]
 
         da_r = Signal(owa, name="da_r")
         db_r = Signal(owb, name="db_r")

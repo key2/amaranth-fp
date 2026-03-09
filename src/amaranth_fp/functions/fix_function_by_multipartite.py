@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from amaranth import *
+from amaranth.lib.memory import Memory
 
 from ..pipelined import PipelinedComponent
 
@@ -72,9 +73,10 @@ class FixFunctionByMultipartiteTable(PipelinedComponent):
         main_addr = Signal(msb, name="main_addr")
         m.d.comb += main_addr.eq(self.x[iw - msb:iw])
 
-        main_mem = Memory(shape=ow, depth=len(self._tables[0]), init=self._tables[0])
-        m.submodules.main_rd = main_rd = main_mem.read_port()
-        m.d.comb += main_rd.addr.eq(main_addr)
+        main_mem = Memory(shape=unsigned(ow), depth=len(self._tables[0]), init=self._tables[0])
+        m.submodules.main_mem = main_mem
+        main_rd = main_mem.read_port()
+        m.d.comb += [main_rd.addr.eq(main_addr), main_rd.en.eq(1)]
 
         main_val = Signal(ow, name="main_val")
         m.d.sync += main_val.eq(main_rd.data)
